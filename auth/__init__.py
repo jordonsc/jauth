@@ -1,71 +1,6 @@
-# This Source Code Form is subject to the terms of the MIT License.
-# If a copy of the MIT License was not distributed with this
-# file, you can obtain one at https://opensource.org/licenses/MIT.
-#
-"""
-Command line HOTP authenticator.
-
-This is a simple attempt to implement the "Pseudocode for Time OTP"
-and "Psuedocode for Event/Counter OTP" given in the Wikipedia article
-on Google Authenticator:
-http://en.wikipedia.org/wiki/Google_Authenticator
-
-Pseudocode for Time OTP
-
-    function GoogleAuthenticatorCode(string secret)
-        key := base32decode(secret)
-        message := current Unix time / 30
-        hash := HMAC-SHA1(key, message)
-        offset := last nibble of hash
-        //4 bytes starting at the offset
-        truncatedHash := hash[offset..offset+3]
-        //remove the most significant bit
-        Set the first bit of truncatedHash to zero
-        code := truncatedHash mod 1000000
-        pad code with 0 until length of code is 6
-        return code
-
-Pseudocode for Event/Counter OTP
-
-    function GoogleAuthenticatorCode(string secret)
-        key := base32decode(secret)
-        message := counter encoded on 8 bytes
-        hash := HMAC-SHA1(key, message)
-        offset := last nibble of hash
-        //4 bytes starting at the offset
-        truncatedHash := hash[offset..offset+3]
-        //remove the most significant bit
-        Set the first bit of truncatedHash to zero
-        code := truncatedHash mod 1000000
-        pad code with 0 until length of code is 6
-        return code
-
-I've validated the pseudocode and this implementation against RFC4226 and
-RFC6238.
-
-This implementation requires:
-
-* Python 3.5 or later
-* cryptography 1.3 or later (see https://cryptography.io/en/latest/)
-* python-dateutil 2.1 or later
-    (see https://pypi.python.org/pypi/python-dateutil/2.1)
-* six 1.10 or later (https://pypi.python.org/pypi/six/1.10.0)
-
-See also:
-    http://en.wikipedia.org/wiki/Google_Authenticator
-    http://tools.ietf.org/html/rfc6238
-    http://tools.ietf.org/html/rfc4226
-    http://tools.ietf.org/html/rfc4648
-
-"""
-
-
 class HOTP:
-    """Implements the HOTP algorithms.
-
-    Implements the HOTP algorithms for counter-based and time-based
-    HOTP calculations.
-
+    """
+    Implements the HOTP algorithms.
     """
 
     def __init__(self):
@@ -187,20 +122,15 @@ class HOTP:
         import base64
         import binascii
 
-        # Pad the base32 string to a multiple of 8 characters
-        #
         secret_length = len(base32_secret_key)
         pad_length = (8 - (secret_length % 8)) % 8
         pad = "=" * pad_length
         base32_secret_key = base32_secret_key + pad
 
-        # Decode it
-        #
         try:
             secret_key = base64.b32decode(base32_secret_key)
         except binascii.Error:
-            raise ValueError(
-                'Wrong length, incorrect padding, or embedded whitespace')
+            raise ValueError('Wrong length, incorrect padding, or embedded whitespace')
         return secret_key
 
     def generate_code_from_counter(self, secret_key, counter, code_length=6):
@@ -232,11 +162,13 @@ class HOTP:
                 padding (length not a multiple of 8 characters).
 
         """
+        # make counter a byte string
         if not isinstance(counter, bytes):
-            # make counter a byte string
             counter = self.num_to_counter(counter)
+
         if 8 != len(counter):
             raise ValueError('counter must be 8 bytes')
+
         # make sure codeLength is an integer
         code_length = int(code_length)
         if ((1 > code_length) or
@@ -245,26 +177,11 @@ class HOTP:
         if not isinstance(secret_key, bytes):
             secret_key = self.convert_base32_secret_key(secret_key)
 
-        # message is the counter value (as byte string, length 8)
-        #
         message = counter
-        # hash := HMAC-SHA1(key, message)
-        #
         hmac = self.generate_hmac(secret_key, message)
-        # offset := last nibble of hash
-        # truncated_hash := hash[offset..offset+3]
-        # (that is 4 bytes starting at the offset)
-        # Set the first bit of truncatedHash to zero
-        # (remove the most significant bit)
-        #
         truncated_hash = self.hash_from_hmac(hmac)
-        # code := truncated_hash mod 1000000
-        # pad code with 0 until length of code is 6
-        #
-        code_string = self.code_from_hash(
-            truncated_hash, code_length=code_length)
-        # return code
-        #
+        code_string = self.code_from_hash(truncated_hash, code_length=code_length)
+
         return code_string
 
     def generate_code_from_time(self, secret_key, code_length=6, period=30):
@@ -292,39 +209,27 @@ class HOTP:
         """
         # make sure period is an integer
         period = int(period)
-        if (0 >= period):
+
+        if 0 >= period:
             raise ValueError('period must be positive integer')
+
         # make sure codeLength is an integer
         code_length = int(code_length)
-        if ((1 > code_length) or
-                (10 < code_length)):
+        if (1 > code_length) or (10 < code_length):
             raise ValueError('code_length must be in the range [1,10]')
+
         if not isinstance(secret_key, bytes):
             secret_key = self.convert_base32_secret_key(secret_key)
 
-        # message := current Unix time / 30
-        #
         message, remaining_seconds = self.counter_from_time(period=period)
-        # hash := HMAC-SHA1(key, message)
-        #
         hmac = self.generate_hmac(secret_key, message)
-        # offset := last nibble of hash
-        # truncatedH_hsh := hash[offset..offset+3]
-        # (that is 4 bytes starting at the offset)
-        # Set the first bit of truncatedHash to zero
-        # (remove the most significant bit)
-        #
         truncated_hash = self.hash_from_hmac(hmac)
-        # code := truncated_hash mod 1000000
-        # pad code with 0 until length of code is 6
-        #
-        code_string = self.code_from_hash(
-            truncated_hash, code_length=code_length)
-        # return code, remaining seconds
-        #
+        code_string = self.code_from_hash(truncated_hash, code_length=code_length)
+
         return code_string, int(period - remaining_seconds)
 
-    def generate_hmac(self, secret_key, counter):
+    @staticmethod
+    def generate_hmac(secret_key, counter):
         """Create a 160-bit HMAC from secret and counter.
 
         Args:
@@ -347,16 +252,18 @@ class HOTP:
 
         if not isinstance(secret_key, bytes):
             raise TypeError('secret_key must be a byte string')
+
         if not isinstance(counter, bytes):
             raise TypeError('counter must be a byte string')
-        if (8 != len(counter)):
+
+        if 8 != len(counter):
             raise ValueError('counter must be 8 bytes')
 
         hmac = hmac.new(secret_key, counter, sha1)
-        hash = hmac.digest()
-        return hash
+        return hmac.digest()
 
-    def hash_from_hmac(self, hmac):
+    @staticmethod
+    def hash_from_hmac(hmac):
         """Get a 4-byte hash from the HMAC.
 
         Using the algorithm in RFC4226, choose a 4-byte segment of the
@@ -392,7 +299,8 @@ class HOTP:
         #
         return truncated_hash
 
-    def num_to_counter(self, num):
+    @staticmethod
+    def num_to_counter(num):
         """Create an 8-byte counter suitable for HMAC generation.
 
         Given a number num, produce an 8-byte byte string representing
@@ -407,7 +315,7 @@ class HOTP:
 
         Returns:
             An 8-byte byte string representing the value as a 64-bit unsigned
-            integer. The most signficant byte is first, least significant byte
+            integer. The most significant byte is first, least significant byte
             is last.
 
         Raises:
@@ -428,7 +336,8 @@ class HOTP:
 
     # not yet tested
 
-    def generate_secret_key(self):
+    @staticmethod
+    def generate_secret_key():
         """Generate a cryptographically random secret key."""
         import os
 
