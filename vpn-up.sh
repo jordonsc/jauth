@@ -9,7 +9,7 @@ PASSWORD=`cat /var/local/ob/pw`
 GA_HASH=`cat /var/local/ob/ga`
 GA_CODE=`${app}/jauth.py "${GA_HASH}"`
 
-/usr/bin/expect << EOF
+expect << EOF
     set timeout 30
 
     spawn /sbin/vpn up;

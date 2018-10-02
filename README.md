@@ -10,6 +10,7 @@ Requirements
 ------------
 * Python 3 (must be callable via `python3`)
 * `sbt-vpn` repo (must be callable via `/sbin/vpn` with default options)
+* `expect` installed (`apt install expect`)
 
 Usage
 -----
